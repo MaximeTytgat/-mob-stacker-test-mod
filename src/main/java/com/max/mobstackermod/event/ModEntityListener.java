@@ -162,25 +162,33 @@ public class ModEntityListener  {
         LivingEntity mainEntity = event.getEntity();
         Level level = mainEntity.level();
         mainEntity.setHealth(mainEntity.getMaxHealth());
-        MobStackerMod.LOGGER.info("test value: {}", EntityType.getKey(mainEntity.getType()));
+
+        int mana = mainEntity.getData(StackMobComponents.MANA.get());
+        MobStackerMod.LOGGER.info("Mana: {}", mana);
+        mainEntity.setData(StackMobComponents.MANA.get(), mana + 1);
+
+        EntityContainer mainEntityContainer = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
+        mainEntityContainer.addEntity(mainEntity);
+        mainEntity.setData(StackMobComponents.STACKED_ENTITIES.get(), mainEntityContainer);
+
 //        int mana = mainEntity.getData(StackMobComponents.MANA.get());
 //        MobStackerMod.LOGGER.info("Mana: {}", mana);
 //        mainEntity.setData(StackMobComponents.MANA.get(), mana + 1);
 
 
-        EntityType<?> entityType = EntityType.byString(EntityType.getKey(mainEntity.getType()).toString()).orElse(null);
-        if (entityType != null && entityType.create(level) instanceof LivingEntity newEntity) {
-            EntityContainer mainEntityContainer = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
-            MobStackerMod.LOGGER.info("Main Entity has no data Container of {}: {}", EntityType.getKey(mainEntity.getType()), mainEntityContainer.getEntityTagListLength());
-
-            MobStackerMod.LOGGER.info("mainEntityContainer size: {}", mainEntityContainer.getEntityTagList().size());
-            mainEntityContainer.addEntity(newEntity);
-            mainEntity.setData(StackMobComponents.STACKED_ENTITIES.get(), mainEntityContainer);
-        }
+//        EntityType<?> entityType = EntityType.byString(EntityType.getKey(mainEntity.getType()).toString()).orElse(null);
+//        if (entityType != null && entityType.create(level) instanceof LivingEntity newEntity) {
+//            EntityContainer mainEntityContainer = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
+//            MobStackerMod.LOGGER.info("Main Entity has no data Container of {}: {}", EntityType.getKey(mainEntity.getType()), mainEntityContainer.getEntityTagListLength());
+//
+////            MobStackerMod.LOGGER.info("mainEntityContainer size: {}", mainEntityContainer.getEntityTagList().size());
+//            mainEntityContainer.addEntity(newEntity);
+//            mainEntity.setData(StackMobComponents.STACKED_ENTITIES.get(), mainEntityContainer);
+//        }
 
         if (mainEntity.hasData(StackMobComponents.STACKED_ENTITIES.get())) {
-            EntityContainer mainEntityContainer = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
-            mainEntity.setCustomName(Component.empty().append(mainEntityContainer.getEntityTagListSize() + "x " + mainEntity.getType().getDescription().getString()));
+            EntityContainer mainEntityContainer2 = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
+            mainEntity.setCustomName(Component.empty().append(mainEntityContainer2.getEntityTagListSize() + "x " + mainEntity.getType().getDescription().getString()));
         }
     }
 

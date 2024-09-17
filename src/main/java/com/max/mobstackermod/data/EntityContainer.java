@@ -17,19 +17,14 @@ import org.jetbrains.annotations.UnknownNullability;
 import java.util.UUID;
 
 public class EntityContainer implements INBTSerializable<CompoundTag> {
-    private static final int MAX_ENTITIES = 10;
+    private static final int MAX_ENTITIES = 100;
     private static NonNullList<CompoundTag> entityTagList;
-    protected byte cursor = 0;
-    public static final CompoundTag EMPTY = new CompoundTag();
 
     private static final IllegalStateException FULL_EXCEPTION = new IllegalStateException("EntityContainer is full");
 
-    public EntityContainer(NonNullList<LivingEntity> entities) {
-        addEntities(entities);
-    }
-
-    public EntityContainer(IAttachmentHolder IAttachmentHolder) {
+    public EntityContainer(IAttachmentHolder iAttachmentHolder) {
         entityTagList = NonNullList.createWithCapacity(MAX_ENTITIES);
+        iAttachmentHolder.setData(StackMobComponents.STACKED_ENTITIES.get(), this);
     }
 
     public NonNullList<CompoundTag> getEntityTagList() {
@@ -58,7 +53,7 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
     }
 
     private boolean isFull() {
-        return cursor >= (MAX_ENTITIES+1);
+        return entityTagList.size() >= MAX_ENTITIES;
     }
 
     public void addEntity(LivingEntity entity) {
@@ -85,13 +80,16 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
     }
 
     public LivingEntity removeLastEntity(Level level, Vec3 position) {
-        if (cursor == 0) return null;
-        return deserializeEntity(entityTagList.get(--cursor), level, position);
+        if (entityTagList.isEmpty()) return null;
+        LivingEntity entity = deserializeEntity(entityTagList.removeLast(), level, position);
+        if (entity == null) {
+            MobStackerMod.LOGGER.error("Failed to deserialize entity");
+        }
+        return entity;
     }
 
     public void reset() {
         entityTagList.clear();
-        cursor = 0;
     }
 
     public static CompoundTag serializeEntity(LivingEntity entity) {
@@ -113,18 +111,21 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
 
     @Override
     public @UnknownNullability CompoundTag serializeNBT(HolderLookup.Provider provider) {
-        CompoundTag compoundTag = new CompoundTag();
-//        compoundTag.putInt("count", count);
-//        ListTag listTag = new ListTag();
-//        listTag.addAll(entityTagList);
-//        compoundTag.put("tags", listTag);
-        return compoundTag;
+        MobStackerMod.LOGGER.info("serializeNBT tag");
+        CompoundTag containerTag = new CompoundTag();
+        ListTag listTag = new ListTag();
+        listTag.addAll(entityTagList);
+        containerTag.put("entityStacked", listTag);
+        return containerTag;
     }
 
     @Override
     public void deserializeNBT(HolderLookup.Provider provider, CompoundTag compoundTag) {
-//        count = 0;
-//        MobStackerMod.LOGGER.info("deserializeNBT tag: {}", compoundTag.get("tags"));
-//        entityTagList.add(compoundTag.getCompound("tags"));
+        MobStackerMod.LOGGER.info("deserializeNBT tag");
+        ListTag listTag = compoundTag.getList("entityStacked", 10);
+        entityTagList = NonNullList.createWithCapacity(MAX_ENTITIES);
+        listTag.forEach(tag -> {
+            entityTagList.add((CompoundTag) tag);
+        });
     }
 }
