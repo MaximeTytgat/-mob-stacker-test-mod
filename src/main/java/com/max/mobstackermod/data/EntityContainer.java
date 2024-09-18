@@ -12,6 +12,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.attachment.IAttachmentHolder;
 import net.neoforged.neoforge.common.util.INBTSerializable;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.UnknownNullability;
 
 import java.util.UUID;
@@ -24,7 +25,6 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
 
     public EntityContainer(IAttachmentHolder iAttachmentHolder) {
         entityTagList = NonNullList.createWithCapacity(MAX_ENTITIES);
-        iAttachmentHolder.setData(StackMobComponents.STACKED_ENTITIES.get(), this);
     }
 
     public NonNullList<CompoundTag> getEntityTagList() {
@@ -69,9 +69,14 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
 
     }
 
-    public void addEntityTag(CompoundTag tag) {
+    public void addEntityTag(CompoundTag initialTag) {
         if (isFull()) throw FULL_EXCEPTION;
-        entityTagList.add(tag);
+
+//        String stringTag = initialTag.toString();
+//        CompoundTag parsedTag =
+
+
+        entityTagList.add(initialTag);
     }
 
     public void addEntityTags(NonNullList<CompoundTag> tags) {
@@ -110,7 +115,7 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
     }
 
     @Override
-    public @UnknownNullability CompoundTag serializeNBT(HolderLookup.Provider provider) {
+    public @UnknownNullability CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
         MobStackerMod.LOGGER.info("serializeNBT tag");
         CompoundTag containerTag = new CompoundTag();
         ListTag listTag = new ListTag();
@@ -120,7 +125,7 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
     }
 
     @Override
-    public void deserializeNBT(HolderLookup.Provider provider, CompoundTag compoundTag) {
+    public void deserializeNBT(HolderLookup.@NotNull Provider provider, CompoundTag compoundTag) {
         MobStackerMod.LOGGER.info("deserializeNBT tag");
         ListTag listTag = compoundTag.getList("entityStacked", 10);
         entityTagList = NonNullList.createWithCapacity(MAX_ENTITIES);
