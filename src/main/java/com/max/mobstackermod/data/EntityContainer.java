@@ -1,10 +1,14 @@
 package com.max.mobstackermod.data;
 
 import com.max.mobstackermod.MobStackerMod;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -19,7 +23,8 @@ import java.util.UUID;
 
 public class EntityContainer implements INBTSerializable<CompoundTag> {
     private static final int MAX_ENTITIES = 100;
-    private static NonNullList<CompoundTag> entityTagList;
+    public static ResourceKey<Level> levelKey;
+    private static NonNullList<LivingEntity> entityTagList;
 
     private static final IllegalStateException FULL_EXCEPTION = new IllegalStateException("EntityContainer is full");
 
@@ -27,7 +32,15 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
         entityTagList = NonNullList.createWithCapacity(MAX_ENTITIES);
     }
 
-    public NonNullList<CompoundTag> getEntityTagList() {
+    public void setSize(int size) {
+        entityTagList = NonNullList.withSize(size, (LivingEntity) null);
+    }
+
+    public void setLevelKey(ResourceKey<Level> levelKey) {
+        EntityContainer.levelKey = levelKey;
+    }
+
+    public NonNullList<LivingEntity> getEntityTagList() {
         return entityTagList;
     }
 
@@ -43,7 +56,7 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
         return entityTagList.size();
     }
 
-    public CompoundTag getNextTag() {
+    public LivingEntity getNextTag() {
         return entityTagList.getFirst();
     }
 
@@ -58,35 +71,36 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
 
     public void addEntity(LivingEntity entity) {
         if (isFull()) throw FULL_EXCEPTION;
-        entityTagList.add(serializeEntity(entity));
+        entity.setUUID(UUID.randomUUID());
+        MobStackerMod.LOGGER.info("Entity: {}", serializeEntity(entity));
+        entityTagList.add(entity);
+        setLevelKey(entity.level().dimension());
     }
 
     public void addEntities(NonNullList<LivingEntity> entities) {
         if (isFull()) throw FULL_EXCEPTION;
-        entities.forEach(entity -> {
-            entityTagList.add(serializeEntity(entity));
-        });
+        entities.forEach(entity -> entity.setUUID(UUID.randomUUID()));
+        setLevelKey(entities.getFirst().level().dimension());
+        entityTagList.addAll(entities);
 
     }
 
     public void addEntityTag(CompoundTag initialTag) {
         if (isFull()) throw FULL_EXCEPTION;
-
-//        String stringTag = initialTag.toString();
-//        CompoundTag parsedTag =
-
-
-        entityTagList.add(initialTag);
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        assert server != null;
+        Level level = server.getLevel(levelKey);
+        entityTagList.add(deserializeEntity(initialTag, level));
     }
 
-    public void addEntityTags(NonNullList<CompoundTag> tags) {
+    public void addEntityTags(NonNullList<LivingEntity> livingEntities) {
         if (isFull()) throw FULL_EXCEPTION;
-        entityTagList.addAll(tags);
+        entityTagList.addAll(livingEntities);
     }
 
     public LivingEntity removeLastEntity(Level level, Vec3 position) {
         if (entityTagList.isEmpty()) return null;
-        LivingEntity entity = deserializeEntity(entityTagList.removeLast(), level, position);
+        LivingEntity entity = entityTagList.removeLast();
         if (entity == null) {
             MobStackerMod.LOGGER.error("Failed to deserialize entity");
         }
@@ -104,11 +118,10 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
         return nbt;
     }
 
-    public static LivingEntity deserializeEntity(CompoundTag nbt, Level level, Vec3 position) {
+    public static LivingEntity deserializeEntity(CompoundTag nbt, Level level) {
         EntityType<?> entityType = EntityType.byString(nbt.getString("id")).orElse(null);
         if (entityType != null && entityType.create(level) instanceof LivingEntity entity) {
             entity.load(nbt);
-            entity.setPos(position.x, position.y, position.z);
             return entity;
         }
         return null;
@@ -116,21 +129,27 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
 
     @Override
     public @UnknownNullability CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
-        MobStackerMod.LOGGER.info("serializeNBT tag");
-        CompoundTag containerTag = new CompoundTag();
-        ListTag listTag = new ListTag();
-        listTag.addAll(entityTagList);
-        containerTag.put("entityStacked", listTag);
-        return containerTag;
+        ListTag nbtTagList = new ListTag();
+
+        for (LivingEntity livingEntity : entityTagList) {
+            livingEntity.level();
+            nbtTagList.add(livingEntity.saveWithoutId(new CompoundTag()));
+        }
+
+        CompoundTag nbt = new CompoundTag();
+        nbt.put("Entities", nbtTagList);
+        nbt.putInt("Size", entityTagList.size());
+        return nbt;
     }
 
     @Override
-    public void deserializeNBT(HolderLookup.@NotNull Provider provider, CompoundTag compoundTag) {
-        MobStackerMod.LOGGER.info("deserializeNBT tag");
-        ListTag listTag = compoundTag.getList("entityStacked", 10);
-        entityTagList = NonNullList.createWithCapacity(MAX_ENTITIES);
-        listTag.forEach(tag -> {
-            entityTagList.add((CompoundTag) tag);
-        });
+    public void deserializeNBT(HolderLookup.@NotNull Provider provider, CompoundTag nbt) {
+        this.setSize(nbt.contains("Size", 3) ? nbt.getInt("Size") : entityTagList.size());
+        ListTag tagList = nbt.getList("Entities", 10);
+
+        for(int i = 0; i < tagList.size(); ++i) {
+            CompoundTag itemTags = tagList.getCompound(i);
+            this.addEntityTag(itemTags);
+        }
     }
 }

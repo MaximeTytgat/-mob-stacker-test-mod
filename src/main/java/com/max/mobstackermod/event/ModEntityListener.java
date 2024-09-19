@@ -12,7 +12,11 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.PotatoBlock;
 import net.minecraft.world.level.entity.EntityTypeTest;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -21,6 +25,7 @@ import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -163,20 +168,38 @@ public class ModEntityListener  {
         Level level = mainEntity.level();
         mainEntity.setHealth(mainEntity.getMaxHealth());
 
-        List<CompoundTag> tags = mainEntity.getData(StackMobComponents.TAGS.get());
-        MobStackerMod.LOGGER.info("Tags: {}", tags.size());
-        CompoundTag tag = EntityContainer.serializeEntity(mainEntity);
-        MobStackerMod.LOGGER.info("test tag: {}", tag.isEmpty());
-        tags.add(tag);
-        mainEntity.setData(StackMobComponents.TAGS.get(), tags);
+//        List<CompoundTag> tags = mainEntity.getData(StackMobComponents.TAGS.get());
+//        MobStackerMod.LOGGER.info("Tags: {}", tags.size());
+//        CompoundTag tag = EntityContainer.serializeEntity(mainEntity);
+//        MobStackerMod.LOGGER.info("test tag: {}", tag.isEmpty());
+//        tags.add(tag);
+//        mainEntity.setData(StackMobComponents.TAGS.get(), tags);
 
-//        int mana = mainEntity.getData(StackMobComponents.MANA.get());
+//        ItemStackHandler handler = mainEntity.getData(StackMobComponents.HANDLER.get());
+//
+//        for (int i = 0; i < handler.getSlots(); i++) {
+//            MobStackerMod.LOGGER.info("Slot {}: {}", i, handler.getStackInSlot(i));
+//        }
+//
+//        // add a new created item to the next slot of the handler
+//        Item potato = Items.POTATO.asItem();
+//        ItemStack stack = new ItemStack(potato);
+//        for (int i = 0; i < handler.getSlots(); i++) {
+//            if (handler.getStackInSlot(i).isEmpty()) {
+//                handler.setStackInSlot(i, stack);
+//                break;
+//            }
+//        }
+
+//        mainEntity.setData(StackMobComponents.HANDLER.get(), handler);
+
+        //        int mana = mainEntity.getData(StackMobComponents.MANA.get());
 //        MobStackerMod.LOGGER.info("Mana: {}", mana);
 //        mainEntity.setData(StackMobComponents.MANA.get(), mana + 1);
 //
-//        EntityContainer mainEntityContainer = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
-//        mainEntityContainer.addEntity(mainEntity);
-//        mainEntity.setData(StackMobComponents.STACKED_ENTITIES.get(), mainEntityContainer);
+        EntityContainer mainEntityContainer = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
+        mainEntityContainer.addEntity(mainEntity);
+        mainEntity.setData(StackMobComponents.STACKED_ENTITIES.get(), mainEntityContainer);
 
 //        int mana = mainEntity.getData(StackMobComponents.MANA.get());
 //        MobStackerMod.LOGGER.info("Mana: {}", mana);
