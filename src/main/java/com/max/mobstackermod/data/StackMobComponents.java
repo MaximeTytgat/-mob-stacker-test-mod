@@ -18,9 +18,16 @@ public class StackMobComponents {
     private static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES = DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, MobStackerMod.MOD_ID);
 
     public static final Supplier<AttachmentType<EntityContainer>> STACKED_ENTITIES = ATTACHMENT_TYPES.register(
-            "stacked_entities", () -> AttachmentType.serializable(EntityContainer::new).build()
+            "stacked_entities", () -> AttachmentType.serializable(() -> new EntityContainer(10)).build()
     );
 
+    public static final Supplier<AttachmentType<ItemStackHandler>> HANDLER = ATTACHMENT_TYPES.register(
+            "handler", () -> AttachmentType.serializable(() -> new ItemStackHandler(10)).build()
+    );
+
+    public static final Supplier<AttachmentType<LivingEntityHandler>> HANDLER_COPY = ATTACHMENT_TYPES.register(
+            "handler_copy", () -> AttachmentType.serializable(() -> new LivingEntityHandler(10)).build()
+    );
 
     public static final Supplier<AttachmentType<List<CompoundTag>>> TAGS = ATTACHMENT_TYPES.register(
             "tags", () -> AttachmentType.<List<CompoundTag>>builder(() -> List.of()).serialize(CompoundTag.CODEC.listOf()).build()
@@ -31,9 +38,6 @@ public class StackMobComponents {
             "mana", () -> AttachmentType.builder(() -> 0).serialize(Codec.INT).build()
     );
 
-    public static final Supplier<AttachmentType<ItemStackHandler>> HANDLER = ATTACHMENT_TYPES.register(
-            "handler", () -> AttachmentType.serializable(() -> new ItemStackHandler(10)).build()
-    );
 
 
     public static void register(IEventBus eventBus) {

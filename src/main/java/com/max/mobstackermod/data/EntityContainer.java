@@ -2,7 +2,6 @@ package com.max.mobstackermod.data;
 
 import com.max.mobstackermod.MobStackerMod;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
@@ -11,10 +10,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.attachment.IAttachmentHolder;
 import net.neoforged.neoforge.common.util.INBTSerializable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.UnknownNullability;
@@ -22,14 +19,14 @@ import org.jetbrains.annotations.UnknownNullability;
 import java.util.UUID;
 
 public class EntityContainer implements INBTSerializable<CompoundTag> {
-    private static final int MAX_ENTITIES = 100;
+    private static final int MAX_ENTITIES = 10;
     public static ResourceKey<Level> levelKey;
     private static NonNullList<LivingEntity> entityTagList;
 
     private static final IllegalStateException FULL_EXCEPTION = new IllegalStateException("EntityContainer is full");
 
-    public EntityContainer(IAttachmentHolder iAttachmentHolder) {
-        entityTagList = NonNullList.createWithCapacity(MAX_ENTITIES);
+    public EntityContainer(int size) {
+        entityTagList = NonNullList.createWithCapacity(size);
     }
 
     public void setSize(int size) {
@@ -72,7 +69,6 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
     public void addEntity(LivingEntity entity) {
         if (isFull()) throw FULL_EXCEPTION;
         entity.setUUID(UUID.randomUUID());
-        MobStackerMod.LOGGER.info("Entity: {}", serializeEntity(entity));
         entityTagList.add(entity);
         setLevelKey(entity.level().dimension());
     }
@@ -112,14 +108,12 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
     }
 
     public static CompoundTag serializeEntity(LivingEntity entity) {
-        CompoundTag nbt = new CompoundTag();
         entity.setUUID(UUID.randomUUID());
-        entity.save(nbt);
-        return nbt;
+        return entity.saveWithoutId(new CompoundTag());
     }
 
     public static LivingEntity deserializeEntity(CompoundTag nbt, Level level) {
-        EntityType<?> entityType = EntityType.byString(nbt.getString("id")).orElse(null);
+        EntityType<?> entityType = EntityType.by(nbt).orElse(null);
         if (entityType != null && entityType.create(level) instanceof LivingEntity entity) {
             entity.load(nbt);
             return entity;
@@ -127,18 +121,31 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
         return null;
     }
 
+//    private static final Codec<CompoundTag> entityCodec = CompoundTag.CODEC.flatXmap(
+//            nbt -> {
+//                if (EntityType.by(nbt).isPresent()) {
+//                    return DataResult.success(nbt);
+//                } else {
+//                    return DataResult.error(() -> "The nbt " + nbt + " does not contain a valid entity id.");
+//                }
+//            },
+//            nbt -> DataResult.success(nbt)
+//    );
+
     @Override
     public @UnknownNullability CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
         ListTag nbtTagList = new ListTag();
 
-        for (LivingEntity livingEntity : entityTagList) {
-            livingEntity.level();
-            nbtTagList.add(livingEntity.saveWithoutId(new CompoundTag()));
-        }
+//        for (int i = 0; i < entityTagList.size(); i++) {
+//            LivingEntity livingEntity = entityTagList.get(i);
+//            CompoundTag nbt = serializeEntity(livingEntity);
+//            nbtTagList.set(i, nbt);
+//        }
 
         CompoundTag nbt = new CompoundTag();
         nbt.put("Entities", nbtTagList);
         nbt.putInt("Size", entityTagList.size());
+        nbt.putString("LevelKey", levelKey.location().toString());
         return nbt;
     }
 
@@ -147,9 +154,9 @@ public class EntityContainer implements INBTSerializable<CompoundTag> {
         this.setSize(nbt.contains("Size", 3) ? nbt.getInt("Size") : entityTagList.size());
         ListTag tagList = nbt.getList("Entities", 10);
 
-        for(int i = 0; i < tagList.size(); ++i) {
-            CompoundTag itemTags = tagList.getCompound(i);
-            this.addEntityTag(itemTags);
-        }
+//        for(int i = 0; i < tagList.size(); ++i) {
+//            CompoundTag itemTags = tagList.getCompound(i);
+//            this.addEntityTag(itemTags);
+//        }
     }
 }
