@@ -58,6 +58,10 @@ public class ServerConfig
             .comment("Whether to stack non-baby mobs")
             .define("stackNonBabies", true);
 
+    private static final ModConfigSpec.IntValue MOB_STACK_LIMIT = BUILDER
+            .comment("The maximum number of mobs to stack")
+            .defineInRange("mobStackLimit", 10, 1, 100);
+
     private static final ModConfigSpec.IntValue PROCESSING_RATE = BUILDER
             .comment("The rate at which to process entities")
             .defineInRange("processingRate", 10, 1, 1000);
@@ -105,6 +109,7 @@ public class ServerConfig
     public static boolean stackBees;
     public static boolean stackBabies;
     public static boolean stackNonBabies;
+    public static int mobStackLimit;
     public static int processingRate;
     public static int processDelay;
     public static int stackSearchRadius;
@@ -136,6 +141,7 @@ public class ServerConfig
         stackBees = STACK_BEES.get();
         stackBabies = STACK_BABIES.get();
         stackNonBabies = STACK_NON_BABIES.get();
+        mobStackLimit = MOB_STACK_LIMIT.get();
         processingRate = PROCESSING_RATE.get();
         processDelay = PROCESS_DELAY.get();
         stackSearchRadius = STACK_SEARCH_RADIUS.get();
