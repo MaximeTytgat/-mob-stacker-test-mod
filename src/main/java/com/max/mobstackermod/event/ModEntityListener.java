@@ -1,20 +1,26 @@
 package com.max.mobstackermod.event;
 
+import com.max.mobstackermod.config.ServerConfig;
 import com.max.mobstackermod.MobStackerMod;
-import com.max.mobstackermod.data.LivingEntityHandler;
+import com.max.mobstackermod.data.StackedLivingEntityHandler;
 import com.max.mobstackermod.data.StackMobComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.entity.EntityTypeTest;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
+import java.util.concurrent.ThreadLocalRandom;
 
 
 @EventBusSubscriber(value = Dist.DEDICATED_SERVER, modid = MobStackerMod.MOD_ID)
@@ -23,22 +29,56 @@ public class ModEntityListener  {
     private static Scheduler scheduler;
 
 
-//    /**
-//     * Called when the server has started. Initializes the scheduler.
-//     *
-//     * @param event The ServerStartedEvent
-//     */
-//    @SubscribeEvent
-//    public static void onServerStarted(ServerStartedEvent event) {
-//        scheduler = new Scheduler(event.getServer());
-//    }
+    /**
+     * Called when the server has started. Initializes the scheduler.
+     *
+     * @param event The ServerStartedEvent
+     */
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        scheduler = new Scheduler(event.getServer());
+    }
 
 
 // SERVER EVENT
-//    @SubscribeEvent
-//    public static void onEndTick(ServerTickEvent.Post event) {
-//        scheduler.tick();
-//    }
+    @SubscribeEvent
+    public static void onEndTick(ServerTickEvent.Post event) {
+        scheduler.tick();
+
+        ServerLevel world = event.getServer().getLevel(Level.OVERWORLD);
+
+//        ArrayList<Entity> applicableEntities = getApplicableEntities(world);
+//
+//        for (Entity mainEntity : applicableEntities) {
+//            if (mainEntity instanceof Player) {
+//                continue;
+//            }
+//            if (mainEntity.hasData(StackMobComponents.HANDLER_COPY.get())) {
+//                LivingEntityHandler mainEntityContainer = mainEntity.getData(StackMobComponents.HANDLER_COPY.get());
+//
+//                if (mainEntityContainer.hasDataToParse()) {
+//                    mainEntityContainer.parseLivingEntityTags(world);
+//                }
+//
+//            }
+//        }
+
+        ArrayList<Entity> applicableEntities = getApplicableEntities(world);
+
+        if (applicableEntities.isEmpty()) {
+            return;
+        }
+
+        // Selects a number of entities randomly based on the config's processing rate
+        ThreadLocalRandom.current().ints(ServerConfig.processingRate, 0, applicableEntities.size())
+                .forEach(i -> {
+                    Entity entity = applicableEntities.get(i);
+//                    mergeEntities(world, entity, applicableEntities);
+                });
+
+
+    }
+
 //    private static boolean isEntityApplicable(Entity nearbyEntity, Entity mainEntity) {
 //        int mainEntityCount = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get()).getEntityTagListLength();
 //        int nearbyEntityCount = nearbyEntity.getData(StackMobComponents.STACKED_ENTITIES.get()).getEntityTagListLength();
@@ -48,19 +88,24 @@ public class ModEntityListener  {
 
     @SubscribeEvent
     public static void test(LivingDamageEvent.Post event) {
-        MobStackerMod.LOGGER.info("LivingDamageEvent");
+        MobStackerMod.LOGGER.info("LivingDamageEvent, uuid: {}", event.getEntity().getUUID());
 
         LivingEntity mainEntity = event.getEntity();
         Level level = mainEntity.level();
 
-        LivingEntityHandler mainEntityContainer = mainEntity.getData(StackMobComponents.HANDLER_COPY.get());
-        MobStackerMod.LOGGER.info("Main Entity has no data Container of {}: {}",
-                EntityType.getKey(mainEntity.getType()),
-                mainEntityContainer.getEntityInSlot(0));
+        if (mainEntity instanceof Player) {
+            return;
+        }
 
-        boolean result = mainEntityContainer.insertLivingEntity(0, mainEntity);
-        MobStackerMod.LOGGER.info("Inserting Entity: {}", result);
-        mainEntity.setData(StackMobComponents.HANDLER_COPY.get(), mainEntityContainer);
+        StackedLivingEntityHandler mainEntityContainer = mainEntity.getData(StackMobComponents.STACKED_ENTITIES.get());
+
+        if (mainEntityContainer.hasDataToParse()) {
+            mainEntityContainer.parseLivingEntityTags(level);
+        }
+
+        boolean result = mainEntityContainer.insertLivingEntity(mainEntity);
+        mainEntity.setCustomName(Component.empty().append(mainEntity.getType().getDescription().getString() + " x" + mainEntityContainer.getSize()));
+        mainEntity.setData(StackMobComponents.STACKED_ENTITIES.get(), mainEntityContainer);
     }
 
 //                            @SubscribeEvent
