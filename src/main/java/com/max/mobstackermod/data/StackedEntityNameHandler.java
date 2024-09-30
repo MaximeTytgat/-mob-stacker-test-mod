@@ -4,8 +4,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.contents.PlainTextContents;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.neoforge.common.util.INBTSerializable;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -16,16 +15,21 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
-    private Entity provider;
+    private LivingEntity provider;
 
     @NonNull
     public String customName = "";
 
     private int stackSize = 1;
 
-    public StackedEntityNameHandler() {}
+    public StackedEntityNameHandler() {
+    }
 
-    public void setProvider(@NonNull Entity provider) {
+    public StackedEntityNameHandler(LivingEntity entity) {
+        this.provider = entity;
+    }
+
+    public void setProvider(@NonNull LivingEntity provider) {
         this.provider = provider;
     }
 
@@ -34,9 +38,9 @@ public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
     }
 
     public String getDefaultName() {
-        if (provider instanceof ItemEntity item) {
-            return capitalizeName(item.getItem().getDisplayName().getString());
-        }
+//        if (provider instanceof ItemEntity item) {
+//            return capitalizeName(item.getItem().getDisplayName().getString());
+//        }
 
         return capitalizeName(provider.getType().toShortString());
     }

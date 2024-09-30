@@ -26,6 +26,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,7 +62,7 @@ public class ModEntityListener  {
 
         ServerLevel world = event.getServer().getLevel(Level.OVERWORLD);
 
-        ArrayList<Entity> applicableEntities = getApplicableEntities(world);
+        ArrayList<LivingEntity> applicableEntities = getApplicableEntities(world);
 
         if (applicableEntities.isEmpty()) {
             return;
@@ -70,11 +71,9 @@ public class ModEntityListener  {
         // Selects a number of entities randomly based on the config's processing rate
         ThreadLocalRandom.current().ints(ServerConfig.processingRate, 0, applicableEntities.size())
                 .forEach(i -> {
-                    Entity entity = applicableEntities.get(i);
-                    mergeEntities(world, entity, applicableEntities);
+                    LivingEntity entity = applicableEntities.get(i);
+                    findEntitiesAndTryToMerge(world, entity, applicableEntities);
                 });
-
-
     }
 
     /**
@@ -86,8 +85,8 @@ public class ModEntityListener  {
      * @param entity             The entity to check for stacking
      * @param applicableEntities A list of entities that are applicable for stacking
      */
-    private static void mergeEntities(ServerLevel world, Entity entity, ArrayList<Entity> applicableEntities) {
-        if (entity.tickCount < ServerConfig.processDelay && !(entity instanceof ItemEntity)) {
+    private static void findEntitiesAndTryToMerge(ServerLevel world, LivingEntity entity, ArrayList<LivingEntity> applicableEntities) {
+        if (entity.tickCount < ServerConfig.processDelay) {
             return;
         } else if (entity instanceof TamableAnimal tamableAnimalNearby && tamableAnimalNearby.isTame()) {
             return;
@@ -99,28 +98,69 @@ public class ModEntityListener  {
             return;
         }
 
-        StackedEntityHandler mainEntityContainer = entity.getData(STACKED_ENTITIES);
-        StackedEntityNameHandler mainEntityNameHandler = entity.getData(STACKED_NAMEABLE);
-        if (!mainEntityNameHandler.isInitialized()) {
-            mainEntityNameHandler.setProvider(entity);
-        }
-
-        if (
-                !mainEntityNameHandler.customName.isEmpty()
-                        && mainEntityContainer.isEmpty()
-                        && !(entity instanceof ItemEntity)
-        ) {
+        if (!entity.hasData(STACKED_ENTITIES) && entity.hasData(STACKED_NAMEABLE)) {
             return;
         }
 
+        StackedEntityHandler mainEntityContainer;
+        StackedEntityNameHandler mainEntityNameHandler;
+        if (entity.hasData(STACKED_ENTITIES) && entity.hasData(STACKED_NAMEABLE)) {
+            mainEntityContainer = entity.getData(STACKED_ENTITIES);
+            mainEntityNameHandler = entity.getData(STACKED_NAMEABLE);
+        } else {
+            mainEntityContainer = new StackedEntityHandler(entity);
+            mainEntityNameHandler = new StackedEntityNameHandler(entity);
+        }
+
+        List<Entity> nearby = findEntitiesAroundMainEntity(world, entity, applicableEntities);
+
+        if (nearby.size() < 2 && !entity.hasData(STACKED_ENTITIES)) {
+            return;
+        }
+
+        nearby.forEach((Entity nearbyEntity) -> {
+            if (nearbyEntity.tickCount < ServerConfig.processDelay && !(nearbyEntity instanceof ItemEntity)) {
+                return;
+            }
+
+            // Serialize entity
+            if (
+                    !entity.hasData(STACKED_ENTITIES) &&
+                    entity.hasData(STACKED_NAMEABLE) &&
+                    !(nearbyEntity instanceof ItemEntity)
+            ) return;
+
+            if (checkEntityEligibility(entity, nearbyEntity)) return;
+
+            if (mergesAndIncreasesSlimeSize(entity, nearbyEntity)) return;
+
+            mergeEntity(nearbyEntity, mainEntityContainer);
+
+            // Delete the entity
+            nearbyEntity.remove(Entity.RemovalReason.DISCARDED);
+        });
+
+        entity.setData(STACKED_ENTITIES, mainEntityContainer);
+
+        int stackSize = mainEntityContainer.getStackedEntityTags().size() + 1;
+
+        if (stackSize < 2) {
+            return;
+        }
+
+        // Set the entity name and displayed stack size
+        mainEntityNameHandler.setStackSize(stackSize);
+        entity.setData(STACKED_NAMEABLE, mainEntityNameHandler);
+    }
+
+    private static @NotNull List<Entity> findEntitiesAroundMainEntity(ServerLevel world, LivingEntity entity, ArrayList<LivingEntity> applicableEntities) {
         int searchRadius = ServerConfig.stackSearchRadius;
 
         if (entity instanceof Slime slime) {
             searchRadius = Math.max(1, slime.getSize() / 5) * ServerConfig.stackSearchRadius;
         }
 
-        // Finds nearby entities that are of the same type
-        List<Entity> nearby = world.getEntities(
+        return world.getEntities(
                 entity,
                 // create AABB centered on entity with radius 10
                 new AABB(entity.getX() - searchRadius,
@@ -132,124 +172,82 @@ public class ModEntityListener  {
                         entity.getZ() + searchRadius),
                 e -> e.getClass().isInstance(entity) && applicableEntities.contains(e)
         );
+    }
 
-        if (nearby.size() < 2 && mainEntityContainer.isEmpty() && !(entity instanceof ItemEntity)) {
-            return;
-        }
-
-
-        // Processes nearby entities and merges them if eligible
-        nearby.forEach(nearbyEntity -> {
-            if (nearbyEntity.tickCount < ServerConfig.processDelay && !(nearbyEntity instanceof ItemEntity)) {
-                return;
-            }
-
-            // Serialize entity
-
+    private static void mergeEntity(Entity nearbyEntity, StackedEntityHandler mainEntityContainer) {
+        if (nearbyEntity.hasData(STACKED_ENTITIES) && nearbyEntity.hasData(STACKED_NAMEABLE)) {
             StackedEntityHandler nearbyContainer = nearbyEntity.getData(STACKED_ENTITIES);
-            StackedEntityNameHandler nearbyNameHandler = nearbyEntity.getData(STACKED_NAMEABLE);
-            if (!nearbyNameHandler.isInitialized()) {
-                nearbyNameHandler.setProvider(nearbyEntity);
-            }
-
-            if (
-                    !nearbyNameHandler.customName.isEmpty() &&
-                            nearbyContainer.isEmpty() &&
-                            !(nearbyEntity instanceof ItemEntity)
-            ) {
-                return;
-            }
-
-            // Check entity eligibility
-            if (nearbyEntity instanceof LivingEntity nearbyLiving && entity instanceof LivingEntity parentLiving) {
-                if (nearbyLiving.isBaby() != parentLiving.isBaby()) {
-                    return;
-                } else if (!ServerConfig.stackBabies && nearbyLiving.isBaby() && parentLiving.isBaby()) {
-                    return;
-                } else if (!ServerConfig.stackNonBabies && !nearbyLiving.isBaby() && !parentLiving.isBaby()) {
-                    return;
-                } else if (ServerConfig.requireLineOfSight &&
-                        (!nearbyLiving.hasLineOfSight(parentLiving) || !parentLiving.hasLineOfSight(nearbyLiving))
-                ) {
-                    return;
-                } else if (nearbyLiving.isDeadOrDying() || parentLiving.isDeadOrDying()) {
-                    return;
-                } else if (!ServerConfig.stackTamed &&
-                        (nearbyEntity instanceof TamableAnimal tamableAnimalNearby && tamableAnimalNearby.isTame())
-                ) {
-                    return;
-                } else if (
-                        nearbyEntity instanceof TamableAnimal tamableAnimalNearby &&
-                                entity instanceof TamableAnimal tamableAnimal &&
-                                tamableAnimalNearby.isTame() != tamableAnimal.isTame()
-                ) {
-                    return;
-                } else if (!parentLiving.getPassengers().isEmpty() || !nearbyLiving.getPassengers().isEmpty()) {
-                    return;
-                } else if (nearbyEntity instanceof Slime nearSlime && entity instanceof Slime parentSlime) {
-                    if (nearSlime.getSize() != parentSlime.getSize()) {
-                        return;
-                    }
-                } else if (
-                        nearbyEntity instanceof Sheep nearbySheep &&
-                                entity instanceof Sheep parentSheep &&
-                                nearbySheep.isSheared() != parentSheep.isSheared()
-                ) {
-                    return;
-                } else if (!ServerConfig.stackBees && nearbyEntity instanceof Bee) {
-                    return;
-                } else if (nearbyEntity instanceof Bee nearbyBee && nearbyBee.hasNectar()) {
-                    return;
-                }
-            }
-
-            if (nearbyEntity.getClass() != entity.getClass()) {
-                throw new IllegalStateException("Entities are not of the same class");
-            }
-
-            // Merges same size slimes and increases their size
-            if (entity instanceof Slime slime && nearbyEntity instanceof Slime nearbySlime && ServerConfig.increaseSlimeSize) {
-                if (Math.abs(slime.getSize() - nearbySlime.getSize()) <= 1) {
-                    if (slime.getSize() < 40) {
-                        if (slime.getSize() < nearbySlime.getSize()) {
-                            slime.setSize(Math.min(40, nearbySlime.getSize() + 1), true);
-                        } else {
-                            slime.setSize(Math.min(40, slime.getSize() + 1), true);
-                        }
-                        nearbySlime.remove(Entity.RemovalReason.DISCARDED);
-                        return;
-                    }
-                } else {
-                    return;
-                }
-            }
-
-            // Merge already stored entities
             mainEntityContainer.getStackedEntityTags().addAll(nearbyContainer.getStackedEntityTags());
-            nearbyContainer.getStackedEntityTags().clear();
-
-            CompoundTag newTag = new CompoundTag();
-            nearbyEntity.save(newTag);
-            mainEntityContainer.getStackedEntityTags().add(newTag);
-
-            nearbyNameHandler.setStackSize(1);
-
-            // Delete the entity
-            nearbyEntity.remove(Entity.RemovalReason.DISCARDED);
-        });
-
-        if (entity instanceof ItemEntity) {
-            return;
+            nearbyEntity.removeData(STACKED_ENTITIES);
+            nearbyEntity.removeData(STACKED_NAMEABLE);
         }
 
-        int stackSize = mainEntityContainer.getStackedEntityTags().size() + 1;
+        CompoundTag newTag = new CompoundTag();
+        nearbyEntity.save(newTag);
+        mainEntityContainer.getStackedEntityTags().add(newTag);
+    }
 
-        if (stackSize < 2) {
-            return;
+    private static boolean mergesAndIncreasesSlimeSize(LivingEntity entity, Entity nearbyEntity) {
+        if (entity instanceof Slime slime && nearbyEntity instanceof Slime nearbySlime && ServerConfig.increaseSlimeSize) {
+            if (Math.abs(slime.getSize() - nearbySlime.getSize()) <= 1) {
+                if (slime.getSize() < 40) {
+                    if (slime.getSize() < nearbySlime.getSize()) {
+                        slime.setSize(Math.min(40, nearbySlime.getSize() + 1), true);
+                    } else {
+                        slime.setSize(Math.min(40, slime.getSize() + 1), true);
+                    }
+                    nearbySlime.remove(Entity.RemovalReason.DISCARDED);
+                    return true;
+                }
+            } else {
+                return true;
+            }
         }
+        return false;
+    }
 
-        // Set the entity name and displayed stack size
-        mainEntityNameHandler.setStackSize(stackSize);
+    private static boolean checkEntityEligibility(LivingEntity entity, Entity nearbyEntity) {
+        if (nearbyEntity instanceof LivingEntity nearbyLiving && entity instanceof LivingEntity parentLiving) {
+            if (nearbyLiving.isBaby() != parentLiving.isBaby()) {
+                return true;
+            } else if (!ServerConfig.stackBabies && nearbyLiving.isBaby() && parentLiving.isBaby()) {
+                return true;
+            } else if (!ServerConfig.stackNonBabies && !nearbyLiving.isBaby() && !parentLiving.isBaby()) {
+                return true;
+            } else if (ServerConfig.requireLineOfSight &&
+                    (!nearbyLiving.hasLineOfSight(parentLiving) || !parentLiving.hasLineOfSight(nearbyLiving))
+            ) {
+                return true;
+            } else if (nearbyLiving.isDeadOrDying() || parentLiving.isDeadOrDying()) {
+                return true;
+            } else if (!ServerConfig.stackTamed &&
+                    (nearbyEntity instanceof TamableAnimal tamableAnimalNearby && tamableAnimalNearby.isTame())
+            ) {
+                return true;
+            } else if (
+                    nearbyEntity instanceof TamableAnimal tamableAnimalNearby &&
+                            entity instanceof TamableAnimal tamableAnimal &&
+                            tamableAnimalNearby.isTame() != tamableAnimal.isTame()
+            ) {
+                return true;
+            } else if (!parentLiving.getPassengers().isEmpty() || !nearbyLiving.getPassengers().isEmpty()) {
+                return true;
+            } else if (nearbyEntity instanceof Slime nearSlime && entity instanceof Slime parentSlime) {
+                return nearSlime.getSize() != parentSlime.getSize();
+            } else if (
+                    nearbyEntity instanceof Sheep nearbySheep &&
+                            entity instanceof Sheep parentSheep &&
+                            nearbySheep.isSheared() != parentSheep.isSheared()
+            ) {
+                return true;
+            } else if (!ServerConfig.stackBees && nearbyEntity instanceof Bee) {
+                return true;
+            } else return nearbyEntity instanceof Bee nearbyBee && nearbyBee.hasNectar();
+        }
+        if (nearbyEntity.getClass() != entity.getClass()) {
+            throw new IllegalStateException("Entities are not of the same class");
+        }
+        return false;
     }
 
     /**
@@ -259,8 +257,8 @@ public class ModEntityListener  {
      * @param world The world to get the entities from
      * @return A list of entities that are applicable for stacking
      */
-    public static ArrayList<Entity> getApplicableEntities(ServerLevel world) {
-        ArrayList<Entity> applicableEntities;
+    public static ArrayList<LivingEntity> getApplicableEntities(ServerLevel world) {
+        ArrayList<LivingEntity> applicableEntities;
 
 
         if (ServerConfig.stackMobs) {
@@ -287,6 +285,7 @@ public class ModEntityListener  {
         LivingEntity died = event.getEntity();
         DamageSource source = event.getSource();
         StackedEntityHandler diedStackedEntityHandler = died.getData(STACKED_ENTITIES);
+
         if (source.equals(died.damageSources().genericKill()) || diedStackedEntityHandler.shouldSkipDeathEvents()) {
             return;
         }
@@ -297,17 +296,9 @@ public class ModEntityListener  {
         }
 
         if (ServerConfig.deathAction == ALL) {
-            diedStackedEntityHandler.applyConsumerToAll(
-                    e -> {
-                        e.getData(STACKED_ENTITIES).setSkipDeathEvents(true);
-                        e.setPos(died.getX(), died.getY(), died.getZ());
-                        died.level().addFreshEntity(e);
-                        e.hurt(source, Float.MAX_VALUE);
-                    },
-                    (ServerLevel) died.level(),
-                    died
-            );
-            diedStackedEntityHandler.getStackedEntityTags().clear();
+            for (int i = 0; i < countEntity - 1; i++) {
+                died.dropAllDeathLoot(((ServerLevel) died.level()), source);
+            }
         } else if (ServerConfig.deathAction == RANDOM) {
             int randomIndex = ThreadLocalRandom.current().nextInt(Math.max(countEntity - 1, 1));
             LivingEntity slicedEntity = (LivingEntity) diedStackedEntityHandler.sliceOne(died.level(), died);
@@ -326,10 +317,13 @@ public class ModEntityListener  {
                 }
                 Optional<Entity> entityWrapper = EntityType.create(entityTags.getFirst(), died.level());
                 entityWrapper.ifPresent(entity -> {
-                    entity.getData(STACKED_ENTITIES).setSkipDeathEvents(true);
-                    entity.setPos(died.getX(), died.getY(), died.getZ());
-                    died.level().addFreshEntity(entity);
-                    entity.hurt(source, Float.MAX_VALUE);
+                    if (entity instanceof LivingEntity livingEntity) {
+                        livingEntity.getData(STACKED_ENTITIES).setSkipDeathEvents(true);
+                        livingEntity.setPos(died.getX(), died.getY(), died.getZ());
+                        livingEntity.dropAllDeathLoot(((ServerLevel) died.level()), source);
+                    } else {
+                        MobStackerMod.LOGGER.error("Entity is not a living entity");
+                    }
                 });
                 slicedEntityStackedEntityHandler.getStackedEntityTags().removeFirst();
             }

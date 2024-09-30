@@ -30,9 +30,15 @@ import static com.max.mobstackermod.data.StackMobComponents.STACKED_NAMEABLE;
 public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
     protected NonNullList<CompoundTag> stackedEntityTags;
     private static boolean skipDeathEvents = false;
+    private static LivingEntity provider;
 
     public StackedEntityHandler(int size) {
         stackedEntityTags = NonNullList.create();
+    }
+
+    public StackedEntityHandler(LivingEntity newProvider) {
+        this(ServerConfig.mobStackLimit);
+        provider = newProvider;
     }
 
     public void addEntity(Entity entity) {
@@ -48,32 +54,31 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
 
         CompoundTag tag = stackedEntityTags.removeFirst();
         Optional<Entity> optionalEntity = EntityType.create(tag, level);
-        if (optionalEntity.isPresent()) {
+        if (optionalEntity.isPresent() && optionalEntity.get() instanceof LivingEntity livingEntity) {
             // Create the entity
-            Entity entity = optionalEntity.get();
-            entity.setPos(provider.getX(), provider.getY(), provider.getZ());
-            entity.tickCount = 0;
-            entity.invulnerableTime = 5;
-            StackedEntityNameHandler nameHandler = entity.getData(STACKED_NAMEABLE);
+            livingEntity.setPos(provider.getX(), provider.getY(), provider.getZ());
+            livingEntity.tickCount = 0;
+            livingEntity.invulnerableTime = 5;
+            StackedEntityNameHandler nameHandler = livingEntity.getData(STACKED_NAMEABLE);
             if (!nameHandler.isInitialized()) {
-                nameHandler.setProvider(entity);
+                nameHandler.setProvider(livingEntity);
             }
             nameHandler.setStackSize(stackedEntityTags.size() + 1);
 
-            // Move the stored entities to the new entity
-            entity.getData(STACKED_ENTITIES)
+            // Move the stored entities to the new livingEntity
+            livingEntity.getData(STACKED_ENTITIES)
                     .getStackedEntityTags()
                     .addAll(provider.getData(STACKED_ENTITIES).getStackedEntityTags());
 
             // Clear the provider's stored entities
             provider.getData(STACKED_ENTITIES).getStackedEntityTags().clear();
 
-            // Spawn the new entity
-            level.addFreshEntity(entity);
+            // Spawn the new livingEntity
+            level.addFreshEntity(livingEntity);
 
-            // Set the new entity's stack size
+            // Set the new livingEntity's stack size
 
-            return entity;
+            return livingEntity;
         }
 
         return null;
@@ -271,4 +276,9 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
         return skipDeathEvents;
     }
 
+    public void initContainer(LivingEntity entity) {
+        if (provider == null) {
+            provider = entity;
+        }
+    }
 }
