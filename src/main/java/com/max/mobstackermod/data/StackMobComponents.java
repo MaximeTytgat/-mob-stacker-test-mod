@@ -12,8 +12,12 @@ import java.util.function.Supplier;
 public class StackMobComponents {
     private static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES = DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, MobStackerMod.MOD_ID);
 
-    public static final Supplier<AttachmentType<StackedLivingEntityHandler>> STACKED_ENTITIES = ATTACHMENT_TYPES.register(
-            "stacked_entities", () -> AttachmentType.serializable(() -> new StackedLivingEntityHandler(ServerConfig.mobStackLimit)).build()
+    public static final Supplier<AttachmentType<StackedEntityHandler>> STACKED_ENTITIES = ATTACHMENT_TYPES.register(
+            "stacked_entities", () -> AttachmentType.serializable(() -> new StackedEntityHandler(ServerConfig.mobStackLimit)).build()
+    );
+
+    public static final Supplier<AttachmentType<StackedEntityNameHandler>> STACKED_NAMEABLE = ATTACHMENT_TYPES.register(
+            "stacked_nameable", () -> AttachmentType.serializable(() -> new StackedEntityNameHandler()).build()
     );
 
     public static void register(IEventBus eventBus) {

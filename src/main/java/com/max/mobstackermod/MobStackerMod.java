@@ -52,6 +52,8 @@ public class MobStackerMod
             if (ServerConfig.stackMobs)
             {
                 LOGGER.info("Stacking mobs is enabled");
+
+                LOGGER.info("Mob stack [{}]", ServerConfig.livingEntityToStack);
             }
             else
             {

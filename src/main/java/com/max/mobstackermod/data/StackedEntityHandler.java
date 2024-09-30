@@ -1,6 +1,7 @@
 package com.max.mobstackermod.data;
 
 import com.max.mobstackermod.MobStackerMod;
+import com.max.mobstackermod.config.ServerConfig;
 import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
@@ -8,6 +9,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -16,75 +18,80 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.INBTSerializable;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
-public class StackedLivingEntityHandler implements INBTSerializable<CompoundTag> {
-    protected NonNullList<LivingEntity> stackedLivingEntities;
-    protected NonNullList<CompoundTag> livingEntityTags;
-    private static final int MAX_ENTITIES = 10;
+import static com.max.mobstackermod.data.StackMobComponents.STACKED_ENTITIES;
+import static com.max.mobstackermod.data.StackMobComponents.STACKED_NAMEABLE;
 
-    public StackedLivingEntityHandler() {
-        this(1);
+public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
+    protected NonNullList<CompoundTag> stackedEntityTags;
+    private static boolean skipDeathEvents = false;
+
+    public StackedEntityHandler(int size) {
+        stackedEntityTags = NonNullList.create();
     }
 
-    public StackedLivingEntityHandler(int size) {
-        livingEntityTags = NonNullList.create();
-        stackedLivingEntities = NonNullList.create();
-    }
-
-    public StackedLivingEntityHandler(NonNullList<CompoundTag> livingEntityTag) {
-        livingEntityTags = livingEntityTag;
-    }
-
-    public void setSize(int size) {
-        livingEntityTags = NonNullList.create();
-        stackedLivingEntities = NonNullList.create();
-    }
-
-    public void addEntity(LivingEntity entity) {
-//        this.validateSlotIndex(slot);
+    public void addEntity(Entity entity) {
         entity.setUUID(UUID.randomUUID());
-        stackedLivingEntities.add(entity);
-        MobStackerMod.LOGGER.info("livingEntities: {}", stackedLivingEntities);
-        MobStackerMod.LOGGER.info("size: {}", stackedLivingEntities.size());
+        CompoundTag entityTag = saveWithoutAttachment(new CompoundTag(), (LivingEntity) entity);
+        stackedEntityTags.add(entityTag);
+    }
+
+    public Object sliceOne(Level level, LivingEntity provider) {
+        if (stackedEntityTags.isEmpty()) {
+            return provider;
+        }
+
+        CompoundTag tag = stackedEntityTags.removeFirst();
+        Optional<Entity> optionalEntity = EntityType.create(tag, level);
+        if (optionalEntity.isPresent()) {
+            // Create the entity
+            Entity entity = optionalEntity.get();
+            entity.setPos(provider.getX(), provider.getY(), provider.getZ());
+            entity.tickCount = 0;
+            entity.invulnerableTime = 5;
+            StackedEntityNameHandler nameHandler = entity.getData(STACKED_NAMEABLE);
+            if (!nameHandler.isInitialized()) {
+                nameHandler.setProvider(entity);
+            }
+            nameHandler.setStackSize(stackedEntityTags.size() + 1);
+
+            // Move the stored entities to the new entity
+            entity.getData(STACKED_ENTITIES)
+                    .getStackedEntityTags()
+                    .addAll(provider.getData(STACKED_ENTITIES).getStackedEntityTags());
+
+            // Clear the provider's stored entities
+            provider.getData(STACKED_ENTITIES).getStackedEntityTags().clear();
+
+            // Spawn the new entity
+            level.addFreshEntity(entity);
+
+            // Set the new entity's stack size
+
+            return entity;
+        }
+
+        return null;
+
     }
 
     public int getSize() {
-        return stackedLivingEntities.size();
+        return stackedEntityTags.size();
     }
 
-    public CompoundTag getEntityInSlot(int slot) {
-//        this.validateSlotIndex(slot);
-        return (CompoundTag) livingEntityTags.get(slot);
+    public boolean isEmpty() {
+        return stackedEntityTags.isEmpty();
     }
 
-    public boolean insertLivingEntity(LivingEntity livingEntity) {
-        if (this.isTagValid(livingEntity)) {
-            this.addEntity(livingEntity);
-            return true;
-        }
-
-        return false;
-    }
-
-    public CompoundTag extractLivingEntity(int slot) {
-        return (CompoundTag)livingEntityTags.get(slot);
-    }
-
-    public int getSlotLimit(int slot) {
-        return 99;
-    }
-
-    public boolean isTagValid(LivingEntity entity) {
-        return true;
-    }
 
     public CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
         ListTag nbtTagList = new ListTag();
-        for (LivingEntity entity : stackedLivingEntities) {
-            nbtTagList.add(saveWithoutAttachment(new CompoundTag(), entity));
-        }
+        nbtTagList.addAll(stackedEntityTags);
         CompoundTag nbt = new CompoundTag();
         nbt.put("entities", nbtTagList);
         return nbt;
@@ -94,7 +101,7 @@ public class StackedLivingEntityHandler implements INBTSerializable<CompoundTag>
         ListTag tagList = nbt.getList("entities", 10);
         for(int i = 0; i < tagList.size(); ++i) {
             CompoundTag nbtTag = tagList.getCompound(i);
-            livingEntityTags.add(nbtTag);
+            stackedEntityTags.add(nbtTag);
         }
         this.onLoad();
     }
@@ -109,26 +116,11 @@ public class StackedLivingEntityHandler implements INBTSerializable<CompoundTag>
         return null;
     }
 
-    public void parseLivingEntityTags(Level level) {
-        for (CompoundTag tag : livingEntityTags) {
-            LivingEntity entity = deserializeEntity(tag, level);
-            stackedLivingEntities.add(entity);
-        }
-        livingEntityTags.clear();
-    }
-
-    public boolean hasDataToParse() {
-        return !livingEntityTags.isEmpty();
-    }
-
     protected boolean validateStackLimit() {
-        return livingEntityTags.size() <= MAX_ENTITIES;
+        return stackedEntityTags.size() <= ServerConfig.mobStackLimit;
     }
 
     protected void onLoad() {
-    }
-
-    protected void onContentsChanged(int slot) {
     }
 
     public CompoundTag saveWithoutAttachment(CompoundTag compound, LivingEntity entity) {
@@ -145,8 +137,8 @@ public class StackedLivingEntityHandler implements INBTSerializable<CompoundTag>
             compound.put("Motion", newDoubleList(vec3.x, vec3.y, vec3.z));
             compound.put("Rotation", newFloatList(entity.getYRot(), entity.getXRot()));
             compound.putFloat("FallDistance", entity.fallDistance);
-            compound.putShort("Fire", (short)entity.getRemainingFireTicks());
-            compound.putShort("Air", (short)entity.getAirSupply());
+            compound.putShort("Fire", (short) entity.getRemainingFireTicks());
+            compound.putShort("Air", (short) entity.getAirSupply());
             compound.putBoolean("OnGround", entity.onGround());
             compound.putBoolean("Invulnerable", entity.isInvulnerable());
             compound.putInt("PortalCooldown", entity.getPortalCooldown());
@@ -240,4 +232,43 @@ public class StackedLivingEntityHandler implements INBTSerializable<CompoundTag>
 
         return listtag;
     }
+
+    public NonNullList<CompoundTag> getStackedEntityTags() {
+        return stackedEntityTags;
+    }
+
+    public void applyConsumerToAllWithoutProvider(Consumer<Entity> function, ServerLevel world) {
+        HashMap<CompoundTag, CompoundTag> overwriteMap = new HashMap<>();
+
+        stackedEntityTags.forEach(stackTag -> {
+            Optional<Entity> entityWrapper = EntityType.create(stackTag, world);
+            entityWrapper.ifPresent(entity -> {
+                function.accept(entity);
+                CompoundTag newTag = new CompoundTag();
+                entity.save(newTag);
+                overwriteMap.put(stackTag, newTag);
+                entity.remove(Entity.RemovalReason.DISCARDED);
+            });
+        });
+
+        overwriteMap.forEach((oldTag, newTag) -> {
+            int insertIndex = stackedEntityTags.indexOf(oldTag);
+            stackedEntityTags.set(insertIndex, newTag);
+        });
+    }
+
+    public void applyConsumerToAll(Consumer<Entity> function, ServerLevel world, LivingEntity provider) {
+        applyConsumerToAllWithoutProvider(function, world);
+
+        function.accept(provider);
+    }
+
+    public void setSkipDeathEvents(boolean b) {
+        skipDeathEvents = b;
+    }
+
+    public boolean shouldSkipDeathEvents() {
+        return skipDeathEvents;
+    }
+
 }

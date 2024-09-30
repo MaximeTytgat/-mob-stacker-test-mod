@@ -1,12 +1,19 @@
 package com.max.mobstackermod.config;
 
 import com.max.mobstackermod.MobStackerMod;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @EventBusSubscriber(modid = MobStackerMod.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 public class ServerConfig
@@ -98,6 +105,24 @@ public class ServerConfig
             .comment("The action to take when a mob is tamed")
             .defineEnum("tamingAction", EnumModifyHandlingAction.SLICE);
 
+    private static final ModConfigSpec.ConfigValue<List<? extends String>> LIVING_ENTITY_STRINGS = BUILDER
+            .comment("A list of living entities to stack")
+            .defineListAllowEmpty(
+                    "livingEntityToStack",
+                    List.of("minecraft:cow", "minecraft:pig", "minecraft:sheep", "minecraft:chicken", "minecraft:bee"),
+                    () -> "",
+                    ServerConfig::validateLivingEntityName
+            );
+
+    private static boolean validateLivingEntityName(Object o) {
+        if (o instanceof String string) {
+            if (ResourceLocation.tryParse(string) != null) {
+                return BuiltInRegistries.ENTITY_TYPE.get(ResourceLocation.parse(string)) instanceof EntityType<?>;
+            }
+        }
+        return false;
+    }
+
     public static boolean stackMobs;
     public static boolean stackItems;
     public static boolean requireLineOfSight;
@@ -119,7 +144,7 @@ public class ServerConfig
     public static EnumModifyHandlingAction shearAction;
     public static EnumModifyHandlingAction breedAction;
     public static EnumModifyHandlingAction tamingAction;
-
+    public static Set<EntityType<?>> livingEntityToStack;
 
     public static void register(ModContainer modContainer) {
         ModConfigSpec config = BUILDER.build();
@@ -129,7 +154,6 @@ public class ServerConfig
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event)
     {
-        // MOB STACKER MOB SERVER CONFIG OPTIONS
         stackMobs = STACK_MOBS.get();
         stackItems = STACK_ITEMS.get();
         requireLineOfSight = REQUIRE_LINE_OF_SIGHT.get();
@@ -151,5 +175,8 @@ public class ServerConfig
         shearAction = SHEAR_ACTION.get();
         breedAction = BREED_ACTION.get();
         tamingAction = TAMING_ACTION.get();
+        livingEntityToStack = LIVING_ENTITY_STRINGS.get().stream()
+                .map(entityName -> BuiltInRegistries.ENTITY_TYPE.get(ResourceLocation.parse(entityName)))
+                .collect(Collectors.toSet());
     }
 }
