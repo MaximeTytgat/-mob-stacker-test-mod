@@ -14,6 +14,8 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.max.mobstackermod.data.StackMobComponents.STACKED_NAMEABLE;
+
 public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
     private LivingEntity provider;
 
@@ -27,6 +29,14 @@ public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
 
     public StackedEntityNameHandler(LivingEntity entity) {
         this.provider = entity;
+    }
+
+    public static StackedEntityNameHandler getOnInitEntityNameHandler(LivingEntity livingEntity) {
+        if (livingEntity.hasData(STACKED_NAMEABLE)) {
+            return livingEntity.getData(STACKED_NAMEABLE);
+        } else {
+            return new StackedEntityNameHandler(livingEntity);
+        }
     }
 
     public void setProvider(@NonNull LivingEntity provider) {

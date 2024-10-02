@@ -10,6 +10,7 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -21,11 +22,9 @@ import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.function.Consumer;
 
 import static com.max.mobstackermod.data.StackMobComponents.STACKED_ENTITIES;
-import static com.max.mobstackermod.data.StackMobComponents.STACKED_NAMEABLE;
 
 public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
     protected NonNullList<CompoundTag> stackedEntityTags;
@@ -33,24 +32,26 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
     private static LivingEntity provider;
 
     public StackedEntityHandler(int size) {
+        // TODO: We Should use the size parameter to set the size of the NonNullList
         stackedEntityTags = NonNullList.create();
     }
 
     public StackedEntityHandler(LivingEntity newProvider) {
         this(ServerConfig.mobStackLimit);
         provider = newProvider;
+        skipDeathEvents = false;
     }
 
-    public void addEntity(Entity entity) {
-        entity.setUUID(UUID.randomUUID());
-        CompoundTag entityTag = saveWithoutAttachment(new CompoundTag(), (LivingEntity) entity);
-        stackedEntityTags.add(entityTag);
-    }
-
-    public Object sliceOne(Level level, LivingEntity provider) {
-        if (stackedEntityTags.isEmpty()) {
-            return provider;
+    public static StackedEntityHandler getOnInitStackedEntityHandler(LivingEntity livingEntity) {
+        if (livingEntity.hasData(STACKED_ENTITIES)) {
+            return livingEntity.getData(STACKED_ENTITIES);
+        } else {
+            return new StackedEntityHandler(livingEntity);
         }
+    }
+
+    public LivingEntity sliceOne(Level level) {
+        if (stackedEntityTags.isEmpty()) return provider;
 
         CompoundTag tag = stackedEntityTags.removeFirst();
         Optional<Entity> optionalEntity = EntityType.create(tag, level);
@@ -59,30 +60,45 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
             livingEntity.setPos(provider.getX(), provider.getY(), provider.getZ());
             livingEntity.tickCount = 0;
             livingEntity.invulnerableTime = 5;
-            StackedEntityNameHandler nameHandler = livingEntity.getData(STACKED_NAMEABLE);
-            if (!nameHandler.isInitialized()) {
-                nameHandler.setProvider(livingEntity);
-            }
+
+            StackedEntityNameHandler nameHandler = StackedEntityNameHandler.getOnInitEntityNameHandler(livingEntity);
             nameHandler.setStackSize(stackedEntityTags.size() + 1);
 
-            // Move the stored entities to the new livingEntity
-            livingEntity.getData(STACKED_ENTITIES)
-                    .getStackedEntityTags()
-                    .addAll(provider.getData(STACKED_ENTITIES).getStackedEntityTags());
+            StackedEntityHandler newEntityContainer = getOnInitStackedEntityHandler(livingEntity);
+            newEntityContainer.addAll(stackedEntityTags);
 
-            // Clear the provider's stored entities
-            provider.getData(STACKED_ENTITIES).getStackedEntityTags().clear();
+            stackedEntityTags.clear();
 
-            // Spawn the new livingEntity
+            livingEntity.setData(STACKED_ENTITIES, newEntityContainer);
+            livingEntity.setData(StackMobComponents.STACKED_NAMEABLE, nameHandler);
+
             level.addFreshEntity(livingEntity);
-
-            // Set the new livingEntity's stack size
 
             return livingEntity;
         }
 
         return null;
 
+    }
+
+    public void dropLootAndRemoveManyEntity(ServerLevel level, DamageSource damageSource, int count, Vec3 pos) {
+        for (int i = 0; i < count; i++) {
+            if (stackedEntityTags.isEmpty()) {
+                MobStackerMod.LOGGER.error("Failed to drop loot of many entity");
+                break;
+            };
+
+            CompoundTag tag = stackedEntityTags.removeFirst();
+            Optional<Entity> optionalEntity = EntityType.create(tag, level);
+            if (optionalEntity.isPresent() && optionalEntity.get() instanceof LivingEntity livingEntity) {
+                StackedEntityHandler livingEntityContainer = getOnInitStackedEntityHandler(livingEntity);
+                livingEntityContainer.setSkipDeathEvents(true);
+                livingEntity.setData(STACKED_ENTITIES, livingEntityContainer);
+
+                livingEntity.setPos(pos.x, pos.y, pos.z);
+                livingEntity.dropAllDeathLoot(level, damageSource);
+            }
+        }
     }
 
     public int getSize() {
@@ -242,6 +258,11 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
         return stackedEntityTags;
     }
 
+    public void addAll(NonNullList<CompoundTag> tags) {
+        stackedEntityTags.addAll(tags);
+    }
+
+
     public void applyConsumerToAllWithoutProvider(Consumer<Entity> function, ServerLevel world) {
         HashMap<CompoundTag, CompoundTag> overwriteMap = new HashMap<>();
 
@@ -276,9 +297,4 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
         return skipDeathEvents;
     }
 
-    public void initContainer(LivingEntity entity) {
-        if (provider == null) {
-            provider = entity;
-        }
-    }
 }
