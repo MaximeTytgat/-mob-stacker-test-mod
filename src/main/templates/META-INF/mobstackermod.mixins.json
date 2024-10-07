@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.max.mobstackermod.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "MixinChicken"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
