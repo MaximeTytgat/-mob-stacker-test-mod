@@ -33,7 +33,11 @@ public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
 
     public static StackedEntityNameHandler getOnInitEntityNameHandler(LivingEntity livingEntity) {
         if (livingEntity.hasData(STACKED_NAMEABLE)) {
-            return livingEntity.getData(STACKED_NAMEABLE);
+            StackedEntityNameHandler nameHandler = livingEntity.getData(STACKED_NAMEABLE);
+            if (nameHandler.provider == null) {
+                nameHandler.provider = livingEntity;
+            }
+            return nameHandler;
         } else {
             return new StackedEntityNameHandler(livingEntity);
         }
@@ -108,5 +112,9 @@ public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
     public void deserializeNBT(HolderLookup.Provider provider, CompoundTag compoundTag) {
         customName = compoundTag.getString("customName");
         stackSize = compoundTag.getInt("stackSize");
+    }
+
+    public Object getProvider() {
+        return provider;
     }
 }

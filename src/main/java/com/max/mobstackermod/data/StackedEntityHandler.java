@@ -4,7 +4,8 @@ import com.max.mobstackermod.MobStackerMod;
 import com.max.mobstackermod.config.ServerConfig;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
-import net.minecraft.nbt.*;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -46,16 +47,20 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
         }
     }
 
-    public LivingEntity sliceOne(Level level) {
+    public LivingEntity sliceOne(Level level, Vec3 pos) {
+        return sliceOne(level, pos , false);
+    }
+
+    public LivingEntity sliceOne(Level level, Vec3 pos, boolean invulnerableTime) {
         if (stackedEntityTags.isEmpty()) return provider;
 
         CompoundTag tag = stackedEntityTags.removeFirst();
         Optional<Entity> optionalEntity = EntityType.create(tag, level);
         if (optionalEntity.isPresent() && optionalEntity.get() instanceof LivingEntity livingEntity) {
             // Create the entity
-            livingEntity.setPos(provider.getX(), provider.getY(), provider.getZ());
+            livingEntity.setPos(pos.x, pos.y, pos.z);
             livingEntity.tickCount = 0;
-            livingEntity.invulnerableTime = 5;
+            if (invulnerableTime) livingEntity.invulnerableTime = 5;
 
             if (!stackedEntityTags.isEmpty()) {
                 StackedEntityNameHandler nameHandler = StackedEntityNameHandler.getOnInitEntityNameHandler(livingEntity);
@@ -63,6 +68,8 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
 
                 StackedEntityHandler newEntityContainer = getOnInitStackedEntityHandler(livingEntity);
                 newEntityContainer.addAll(stackedEntityTags);
+                newEntityContainer.setLastHurtValue(lastHurtValue);
+                newEntityContainer.setLastHpValue(lastHpValue);
 
                 stackedEntityTags.clear();
 
@@ -72,6 +79,7 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
                 livingEntity.removeData(STACKED_ENTITIES);
                 livingEntity.removeData(StackMobComponents.STACKED_NAMEABLE);
             }
+
 
             level.addFreshEntity(livingEntity);
 
@@ -84,10 +92,7 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
 
     public void dropLootAndRemoveManyEntity(ServerLevel level, DamageSource damageSource, int count, Vec3 pos) {
         for (int i = 0; i < count; i++) {
-            if (stackedEntityTags.isEmpty()) {
-                MobStackerMod.LOGGER.error("Failed to drop loot of many entity");
-                break;
-            }
+            if (stackedEntityTags.isEmpty()) break;
 
             CompoundTag tag = stackedEntityTags.removeFirst();
             Optional<Entity> optionalEntity = EntityType.create(tag, level);

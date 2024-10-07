@@ -6,7 +6,6 @@ import com.max.mobstackermod.data.StackedEntityHandler;
 import com.max.mobstackermod.data.StackedEntityNameHandler;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -23,17 +22,15 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
-import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.max.mobstackermod.config.EnumDeathHandlingAction.*;
 import static com.max.mobstackermod.data.StackMobComponents.STACKED_ENTITIES;
 import static com.max.mobstackermod.data.StackMobComponents.STACKED_NAMEABLE;
 
@@ -106,9 +103,11 @@ public class ModEntityListener  {
 
         List<Entity> nearby = findEntitiesAroundMainEntity(world, entity, applicableEntities);
 
-        if (nearby.size() < 2 && !entity.hasData(STACKED_ENTITIES)) {
+        if (nearby.size() <= ServerConfig.mobNeededToStack && !entity.hasData(STACKED_ENTITIES)) {
             return;
         }
+
+        AtomicInteger nearbyAdded = new AtomicInteger();
 
         nearby.forEach((Entity nearbyEntity) -> {
             if (nearbyEntity.tickCount < ServerConfig.processDelay && !(nearbyEntity instanceof ItemEntity)) {
@@ -130,7 +129,12 @@ public class ModEntityListener  {
 
             // Delete the entity
             nearbyEntity.remove(Entity.RemovalReason.DISCARDED);
+            nearbyAdded.getAndIncrement();
         });
+
+        if (nearbyAdded.get() == 0) {
+            return;
+        }
 
         entity.setData(STACKED_ENTITIES, mainEntityContainer);
 
@@ -143,8 +147,11 @@ public class ModEntityListener  {
             return;
         }
 
+        MobStackerMod.LOGGER.info("Stacking entities: {}", stackSize);
+        MobStackerMod.LOGGER.info("Entity position: {}", entity.position());
+
         // Set the entity name and displayed stack size
-        StackedEntityNameHandler.getOnInitEntityNameHandler(entity).setStackSize(stackSize);
+        mainEntityNameHandler.setStackSize(stackSize);
     }
 
     private static @NotNull List<Entity> findEntitiesAroundMainEntity(ServerLevel world, LivingEntity entity, ArrayList<LivingEntity> applicableEntities) {
@@ -281,60 +288,5 @@ public class ModEntityListener  {
             entityStackedEntityHandler.setLastHpValue(damagedEntity.getHealth());
         }
     }
-
-    @SubscribeEvent
-    public static void onEntityDeath(LivingDeathEvent event) {
-        MobStackerMod.LOGGER.info("Entity died EVENT");
-        LivingEntity died = event.getEntity();
-        DamageSource source = event.getSource();
-
-        if (!died.hasData(STACKED_ENTITIES)) return;
-        StackedEntityHandler diedStackedEntityHandler = died.getData(STACKED_ENTITIES);
-
-        if (source.equals(died.damageSources().genericKill()) || diedStackedEntityHandler.shouldSkipDeathEvents()) {
-            return;
-        }
-
-        int countEntity = diedStackedEntityHandler.getSize();
-        if (countEntity < 1) {
-            return;
-        }
-
-        if (ServerConfig.deathAction == ALL) {
-            diedStackedEntityHandler.dropLootAndRemoveManyEntity((ServerLevel) died.level(), source, diedStackedEntityHandler.getSize(), died.getPosition(died.tickCount - 5));
-        } else if (ServerConfig.deathAction == RANDOM) {
-            int randomIndex = ThreadLocalRandom.current().nextInt(Math.max(countEntity - 1, 1));
-            LivingEntity slicedEntity = diedStackedEntityHandler.sliceOne(died.level());
-            StackedEntityHandler slicedEntityStackedEntityHandler = slicedEntity.getData(STACKED_ENTITIES);
-            slicedEntityStackedEntityHandler.dropLootAndRemoveManyEntity((ServerLevel) died.level(), source, randomIndex, died.getPosition(died.tickCount - 5));
-        } else if (ServerConfig.deathAction == SLICE) {
-            diedStackedEntityHandler.sliceOne(died.level());
-        } else if (ServerConfig.deathAction == BY_DAMAGE) {
-            float damage = diedStackedEntityHandler.getLastHurtValue();
-            damage -= diedStackedEntityHandler.getLastHpValue();
-
-            LivingEntity newEntity = diedStackedEntityHandler.sliceOne(died.level());
-            StackedEntityHandler newEntityStackedEntityHandler = newEntity.getData(STACKED_ENTITIES);
-
-            while (damage > 0f) {
-                MobStackerMod.LOGGER.info("Damage: {}", damage);
-                CompoundTag next = newEntityStackedEntityHandler.getStackedEntityTags().getFirst();
-                Optional<Entity> optionalEntity = EntityType.create(next, died.level());
-                if (optionalEntity.isPresent() && optionalEntity.get() instanceof LivingEntity livingEntity) {
-                    float hpLeft = livingEntity.getHealth();
-                    livingEntity.hurt(source, damage);
-                    damage -= hpLeft;
-                    if (livingEntity.isDeadOrDying() && livingEntity.hasData(STACKED_ENTITIES) && !livingEntity.getData(STACKED_ENTITIES).isEmpty()) {
-                        newEntityStackedEntityHandler.dropLootAndRemoveManyEntity((ServerLevel) died.level(), source, 1, died.getPosition(died.tickCount - 5));
-                    }
-                }
-
-                if (newEntity.hasData(STACKED_ENTITIES) && newEntity.getData(STACKED_ENTITIES).isEmpty()) {
-                    break;
-                }
-            }
-        }
-    }
-
 
 }
