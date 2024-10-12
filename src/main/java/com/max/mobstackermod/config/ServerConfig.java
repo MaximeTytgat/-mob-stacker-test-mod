@@ -26,8 +26,8 @@ public class ServerConfig
             .define("stackMobs", true);
 
     private static final ModConfigSpec.BooleanValue STACK_ITEMS = BUILDER
-            .comment("Whether to stack items")
-            .define("stackItems", true);
+            .comment("Whether to stack items (not recommended actually)")
+            .define("stackItems", false);
 
     private static final ModConfigSpec.BooleanValue REQUIRE_LINE_OF_SIGHT = BUILDER
             .comment("Whether to require line of sight to stack mobs")
@@ -64,6 +64,14 @@ public class ServerConfig
     private static final ModConfigSpec.BooleanValue STACK_NON_BABIES = BUILDER
             .comment("Whether to stack non-baby mobs")
             .define("stackNonBabies", true);
+
+    private static final ModConfigSpec.BooleanValue STACK_ONLY_SHEEP_WITH_SAME_COLOR = BUILDER
+            .comment("Whether to stack only sheep with the same color")
+            .define("stackOnlySheepWithSameColor", false);
+
+    private static final ModConfigSpec.BooleanValue STACK_RENAMED_ENTITIES = BUILDER
+            .comment("Whether to stack renamed entities")
+            .define("stackRenamedEntities", false);
 
     private static final ModConfigSpec.IntValue MOB_STACK_LIMIT = BUILDER
             .comment("The maximum number of mobs to stack")
@@ -138,6 +146,8 @@ public class ServerConfig
     public static boolean stackBees;
     public static boolean stackBabies;
     public static boolean stackNonBabies;
+    public static boolean stackOnlySheepWithSameColor;
+    public static boolean stackRenamedEntities;
     public static int mobStackLimit;
     public static int mobNeededToStack;
     public static int processingRate;
@@ -170,6 +180,8 @@ public class ServerConfig
         stackBees = STACK_BEES.get();
         stackBabies = STACK_BABIES.get();
         stackNonBabies = STACK_NON_BABIES.get();
+        stackOnlySheepWithSameColor = STACK_ONLY_SHEEP_WITH_SAME_COLOR.get();
+        stackRenamedEntities = STACK_RENAMED_ENTITIES.get();
         mobStackLimit = MOB_STACK_LIMIT.get();
         mobNeededToStack = MOB_NEEDED_TO_STACK.get();
         processingRate = PROCESSING_RATE.get();

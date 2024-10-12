@@ -19,6 +19,8 @@ import static com.max.mobstackermod.data.StackMobComponents.STACKED_NAMEABLE;
 public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
     private LivingEntity provider;
 
+    private boolean isNameTagged = false;
+
     @NonNull
     public String customName = "";
 
@@ -82,16 +84,9 @@ public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
         setCustomName(customName);
     }
 
-
-    public void readFromNbt(CompoundTag tag, HolderLookup.Provider registryLookup) {
-        tag.putString("StackMobCustomName", customName);
-        tag.putInt("StackMobStackSize", stackSize);
-    }
-
-
-    public void writeToNbt(CompoundTag tag, HolderLookup.Provider registryLookup) {
-        customName = Objects.requireNonNullElse(tag.getString("StackMobCustomName"), "");
-        stackSize = tag.getInt("StackMobStackSize");
+    public void clearCustomName() {
+        customName = "";
+        provider.setCustomName(null);
     }
 
     public static String capitalizeName(String name) {
@@ -114,7 +109,11 @@ public class StackedEntityNameHandler implements INBTSerializable<CompoundTag> {
         stackSize = compoundTag.getInt("stackSize");
     }
 
-    public Object getProvider() {
-        return provider;
+    public boolean isNameTagged() {
+        return isNameTagged;
+    }
+
+    public void setNameTagged(boolean nameTagged) {
+        isNameTagged = nameTagged;
     }
 }

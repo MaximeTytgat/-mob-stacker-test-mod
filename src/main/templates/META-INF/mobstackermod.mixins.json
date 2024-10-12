@@ -3,8 +3,17 @@
   "minVersion": "0.8",
   "package": "com.max.mobstackermod.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [
-    "MixinChicken"
+  "mixins": [],
+  "server": [
+    "MixinChicken",
+    "MixinAgeableMob",
+    "MixinSlime",
+    "MixinLivingEntity",
+    "MixinSheep",
+    "MixinItemEntity",
+    "MixinTamableAnimal",
+    "MixinNameTagItem",
+    "MixinAnimal"
   ],
   "client": [],
   "injectors": {

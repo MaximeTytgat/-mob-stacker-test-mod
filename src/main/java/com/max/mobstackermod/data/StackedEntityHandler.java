@@ -17,6 +17,7 @@ import net.neoforged.neoforge.common.util.INBTSerializable;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static com.max.mobstackermod.data.StackMobComponents.STACKED_ENTITIES;
 
@@ -39,7 +40,7 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
         skipDeathEvents = false;
     }
 
-    public static StackedEntityHandler getOnInitStackedEntityHandler(LivingEntity livingEntity) {
+    public static StackedEntityHandler getOrInitStackedEntityHandler(LivingEntity livingEntity) {
         if (livingEntity.hasData(STACKED_ENTITIES)) {
             return livingEntity.getData(STACKED_ENTITIES);
         } else {
@@ -66,7 +67,7 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
                 StackedEntityNameHandler nameHandler = StackedEntityNameHandler.getOnInitEntityNameHandler(livingEntity);
                 nameHandler.setStackSize(stackedEntityTags.size() + 1);
 
-                StackedEntityHandler newEntityContainer = getOnInitStackedEntityHandler(livingEntity);
+                StackedEntityHandler newEntityContainer = getOrInitStackedEntityHandler(livingEntity);
                 newEntityContainer.addAll(stackedEntityTags);
                 newEntityContainer.setLastHurtValue(lastHurtValue);
                 newEntityContainer.setLastHpValue(lastHpValue);
@@ -97,7 +98,7 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
             CompoundTag tag = stackedEntityTags.removeFirst();
             Optional<Entity> optionalEntity = EntityType.create(tag, level);
             if (optionalEntity.isPresent() && optionalEntity.get() instanceof LivingEntity livingEntity) {
-                StackedEntityHandler livingEntityContainer = getOnInitStackedEntityHandler(livingEntity);
+                StackedEntityHandler livingEntityContainer = getOrInitStackedEntityHandler(livingEntity);
                 livingEntityContainer.setSkipDeathEvents(true);
                 livingEntity.setData(STACKED_ENTITIES, livingEntityContainer);
 
@@ -105,6 +106,24 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
                 livingEntity.dropAllDeathLoot(level, damageSource);
             }
         }
+    }
+
+    public void applyConsumerToAll(Consumer<LivingEntity> consumer, ServerLevel level) {
+        NonNullList<CompoundTag> newStackedEntityTags = NonNullList.create();
+
+        stackedEntityTags.forEach(stackTag -> {
+           LivingEntity livingEntity = deserializeEntity(stackTag, level);
+           if (livingEntity != null) {
+               consumer.accept(livingEntity);
+               CompoundTag newTag = new CompoundTag();
+               livingEntity.save(newTag);
+               newStackedEntityTags.add(newTag);
+               livingEntity.remove(Entity.RemovalReason.DISCARDED);
+           }
+        });
+
+        stackedEntityTags.clear();
+        stackedEntityTags.addAll(newStackedEntityTags);
     }
 
     public int getSize() {
@@ -134,10 +153,9 @@ public class StackedEntityHandler implements INBTSerializable<CompoundTag> {
     }
 
     public static LivingEntity deserializeEntity(CompoundTag nbt, Level level) {
-        EntityType<?> entityType = EntityType.byString(nbt.getString("id")).orElse(null);
-        if (entityType != null && entityType.create(level) instanceof LivingEntity entity) {
-            entity.load(nbt);
-            return entity;
+        Optional<Entity> entity = EntityType.create(nbt, level);
+        if (entity.isPresent() && entity.get() instanceof LivingEntity livingEntity) {
+            return livingEntity;
         }
         MobStackerMod.LOGGER.error("Failed to deserialize entity");
         return null;

@@ -10,6 +10,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.animal.Bee;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -21,7 +22,6 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.jetbrains.annotations.NotNull;
@@ -38,7 +38,7 @@ import static com.max.mobstackermod.data.StackMobComponents.STACKED_NAMEABLE;
 @EventBusSubscriber(value = Dist.DEDICATED_SERVER, modid = MobStackerMod.MOD_ID)
 public class ModEntityListener  {
 
-    private static Scheduler scheduler;
+    public static Scheduler scheduler;
 
 
     /**
@@ -99,7 +99,7 @@ public class ModEntityListener  {
             return;
         }
 
-        StackedEntityHandler mainEntityContainer = StackedEntityHandler.getOnInitStackedEntityHandler(entity);
+        StackedEntityHandler mainEntityContainer = StackedEntityHandler.getOrInitStackedEntityHandler(entity);
 
         List<Entity> nearby = findEntitiesAroundMainEntity(world, entity, applicableEntities);
 
@@ -146,9 +146,6 @@ public class ModEntityListener  {
         if (stackSize < 2) {
             return;
         }
-
-        MobStackerMod.LOGGER.info("Stacking entities: {}", stackSize);
-        MobStackerMod.LOGGER.info("Entity position: {}", entity.position());
 
         // Set the entity name and displayed stack size
         mainEntityNameHandler.setStackSize(stackSize);
@@ -228,7 +225,8 @@ public class ModEntityListener  {
             } else if (
                     nearbyEntity instanceof TamableAnimal tamableAnimalNearby &&
                             entity instanceof TamableAnimal tamableAnimal &&
-                            tamableAnimalNearby.isTame() != tamableAnimal.isTame()
+                            (tamableAnimalNearby.isTame() != tamableAnimal.isTame() ||
+                            tamableAnimalNearby.getOwnerUUID() != tamableAnimal.getOwnerUUID())
             ) {
                 return true;
             } else if (!parentLiving.getPassengers().isEmpty() || !nearbyLiving.getPassengers().isEmpty()) {
@@ -238,10 +236,18 @@ public class ModEntityListener  {
             } else if (
                     nearbyEntity instanceof Sheep nearbySheep &&
                             entity instanceof Sheep parentSheep &&
-                            nearbySheep.isSheared() != parentSheep.isSheared()
+                            (nearbySheep.isSheared() != parentSheep.isSheared() ||
+                                    (ServerConfig.stackOnlySheepWithSameColor && nearbySheep.getColor() != parentSheep.getColor()))
             ) {
                 return true;
             } else if (!ServerConfig.stackBees && nearbyEntity instanceof Bee) {
+                return true;
+            } else if (
+                    (entity instanceof Animal animal &&
+                            (animal.isInLove() || !animal.canFallInLove())) ||
+                    (nearbyEntity instanceof Animal nearbyAnimal &&
+                            (nearbyAnimal.isInLove() || !nearbyAnimal.canFallInLove()))
+            ) {
                 return true;
             } else return nearbyEntity instanceof Bee nearbyBee && nearbyBee.hasNectar();
         }
@@ -276,17 +282,4 @@ public class ModEntityListener  {
 
         return applicableEntities;
     }
-
-    @SubscribeEvent
-    public static void onEntityDamaged(LivingDamageEvent.Pre event) {
-        MobStackerMod.LOGGER.info("Entity damaged, new damage: {}", event.getNewDamage());
-        MobStackerMod.LOGGER.info("Entity damaged, HP: {}", event.getEntity().getHealth());
-        LivingEntity damagedEntity = event.getEntity();
-        if (damagedEntity.hasData(STACKED_ENTITIES)) {
-            StackedEntityHandler entityStackedEntityHandler = damagedEntity.getData(STACKED_ENTITIES);
-            entityStackedEntityHandler.setLastHurtValue(event.getNewDamage());
-            entityStackedEntityHandler.setLastHpValue(damagedEntity.getHealth());
-        }
-    }
-
 }
